@@ -1,65 +1,59 @@
 export default async function handler(req, res) {
-
-    try {
-        const q = req.query.q;
-
-        if (!q || q.length < 2) {
-            return res.status(200).json([]);
-        }
-
-        const client_id = process.env.CLIENT_ID;
-        const client_secret = process.env.CLIENT_SECRET;
-
-        if (!client_id || !client_secret) {
-            return res.status(500).json({ error: "no env" });
-        }
-
-        // 🔑 создаём base64
-        const basic = Buffer.from(`${client_id}:${client_secret}`).toString("base64");
-
-        // 🎧 получаем токен
-        const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
-            method: "POST",
-            headers: {
-                "Authorization": "Basic " + basic,
-                "Content-Type": "application/x-www-form-urlencoded"
-            },
-            body: "grant_type=client_credentials"
-        });
-
-        const tokenData = await tokenRes.json();
-
-        if (!tokenData.access_token) {
-            return res.status(500).json({ error: "no token", data: tokenData });
-        }
-
-        const token = tokenData.access_token;
-
-        // 🔍 поиск треков
-        const searchRes = await fetch(
-            https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=10&market=US,
-            {
-                headers: {
-                    "Authorization": "Bearer " + token
-                }
-            }
-        );
-
-        const data = await searchRes.json();
-
-        const items = data.tracks?.items || [];
-
-        const out = items.map(t => ({
-            id: t.id,
-            title: t.name,
-            artist: t.artists?.[0]?.name || "",
-            cover: t.album?.images?.[0]?.url || "",
-            url: t.external_urls?.spotify || ""
-        }));
-
-        res.status(200).json(out);
-
-    } catch (e) {
-        res.status(500).json({ error: "server error", message: e.message });
+  try {
+    const q = req.query.q || "";
+    if (q.length < 2) {
+      return res.status(200).json([]);
     }
+
+    const client_id = process.env.CLIENT_ID;
+    const client_secret = process.env.CLIENT_SECRET;
+
+    if (!client_id || !client_secret) {
+      return res.status(500).json({ error: "no env", client_id, client_secret });
+    }
+
+    // 👇 важно: base64
+    const basic = Buffer.from(`${client_id}:${client_secret}`).toString("base64");
+
+    const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: {
+        Authorization: "Basic " + basic,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: "grant_type=client_credentials",
+    });
+
+    const tokenData = await tokenRes.json();
+
+    // 👇 если токен не пришёл — покажем ответ Spotify
+    if (!tokenData.access_token) {
+      return res.status(500).json({
+        error: "no token",
+        spotify_response: tokenData,
+      });
+    }
+
+    const token = tokenData.access_token;
+
+    const searchRes = await fetch(
+      https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=5,
+      {
+        headers: {
+          Authorization: "Bearer " + token,
+        },
+      }
+    );
+
+    const data = await searchRes.json();
+
+    return res.status(200).json(data);
+
+  } catch (e) {
+    return res.status(500).json({
+      error: "server crash",
+      message: e.message,
+      stack: e.stack,
+    });
+  }
 }
